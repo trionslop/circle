@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Circle Equation Visualizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.4.2/lib/p5.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 0; padding: 0; text-align: center; }
+    #title { font-size: 32px; font-weight: bold; padding: 20px 0; background: #222; color: white; }
+    #controls { padding: 10px; background: #f0f0f0; display: inline-block; margin-bottom: 10px; }
+    label, input { margin-right: 10px; }
+    #equationDisplay {
+      text-align: center;
+      font-size: 20px;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    #infoDisplay {
+      font-size: 16px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="title">Circle Visualizer</div>
+  <div id="equationDisplay">(x - 0)<sup>2</sup> + (y - 0)<sup>2</sup> = 25</div>
+  <div id="controls">
+    <label>a: <input type="number" id="a" value="0" step="1"></label>
+    <label>b: <input type="number" id="b" value="0" step="1"></label>
+    <label>r: <input type="number" id="r" value="5" min="1" step="0.1"></label>
+    <label>θ (도): <input type="number" id="angleInput" value="45" step="1" min="1" max="89" onchange="updateFromAngle()"></label>
+    <button onclick="updateFromInput()">Update</button>
+  </div>
+  <div id="canvas-container"></div>
+  <div id="infoDisplay"></div>
+  <script>
+    let a = 0, b = 0, r = 5;
+    let canvasSize = 600;
+    let scale = 30;
+
+    let center = { x: 0, y: 0 };
+    let radiusHandle = { x: 0, y: 0 };
+    let draggingCenter = false;
+    let draggingRadius = false;
+
+    function setup() {
+      let canvas = createCanvas(canvasSize, canvasSize);
+      canvas.parent("canvas-container");
+      center = toCanvasCoords(a, b);
+      updateRadiusHandle();
+      updateEquationDisplay();
+    }
+
+    function draw() {
+      background(255);
+      drawGrid();
+      stroke(0);
+      noFill();
+      ellipse(center.x, center.y, r * 2 * scale, r * 2 * scale);
+      stroke("blue");
+      line(center.x, center.y, radiusHandle.x, radiusHandle.y);
+
+      noStroke();
+      fill("blue");
+      textSize(14);
+      let midX = (center.x + radiusHandle.x) / 2;
+      let midY = (center.y + radiusHandle.y) / 2;
+      text(`r = ${r.toFixed(2)}`, midX + 10, midY);
+
+      let baseX = radiusHandle.x;
+      let baseY = center.y;
+      let heightX = radiusHandle.x;
+      let heightY = radiusHandle.y;
+
+      stroke("gray");
+      strokeWeight(1);
+      drawingContext.setLineDash([5, 5]);
+      line(center.x, center.y, baseX, baseY);
+      line(baseX, baseY, heightX, heightY);
+      drawingContext.setLineDash([]);
+
+      let dx = Math.abs((baseX - center.x) / scale);
+      let dy = Math.abs((center.y - heightY) / scale);
+      let angle = atan2(dy, dx);
+      let deg = degrees(angle);
+
+      noStroke();
+      fill("black");
+      textSize(14);
+      textAlign(CENTER, CENTER);
+      if (dx > 0.05) text(`√(${(dx*dx).toFixed(2)}) ≈ ${simplifySqrt((dx*dx).toFixed(2))}`, (center.x + baseX) / 2, center.y - 10);
+      if (dy > 0.05) text(`√(${(dy*dy).toFixed(2)}) ≈ ${simplifySqrt((dy*dy).toFixed(2))}`, baseX + 30, (baseY + heightY) / 2);
+
+      fill("purple");
+      text(`θ ≈ ${deg.toFixed(1)}°`, baseX - 40, baseY + 20);
+
+      const sinStr = simplifyFraction(dy, r);
+      const cosStr = simplifyFraction(dx, r);
+      const tanStr = simplifyFraction(dy, dx);
+      document.getElementById("infoDisplay").innerHTML =
+        `sin(θ) = ${sinStr} &nbsp;&nbsp; cos(θ) = ${cosStr} &nbsp;&nbsp; tan(θ) = ${tanStr}`;
+
+      fill("red");
+      noStroke();
+      circle(center.x, center.y, 10);
+      fill("green");
+      circle(radiusHandle.x, radiusHandle.y, 10);
+    }
+
+    function drawGrid() {
+      stroke(220);
+      for (let x = 0; x <= width; x += scale) line(x, 0, x, height);
+      for (let y = 0; y <= height; y += scale) line(0, y, width, y);
+      stroke(180);
+      line(width/2, 0, width/2, height);
+      line(0, height/2, width, height/2);
+    }
+
+    function toCanvasCoords(x, y) {
+      return { x: width / 2 + x * scale, y: height / 2 - y * scale };
+    }
+
+    function toGraphCoords(x, y) {
+      return { x: Math.round((x - width / 2) / scale), y: Math.round((height / 2 - y) / scale) };
+    }
+
+    function updateRadiusHandle() {
+      let angleDeg = parseFloat(document.getElementById("angleInput").value);
+      let angleRad = radians(angleDeg);
+      let dx = r * cos(angleRad);
+      let dy = r * sin(angleRad);
+      let canvasCoords = toCanvasCoords(a + dx, b + dy);
+      radiusHandle.x = canvasCoords.x;
+      radiusHandle.y = canvasCoords.y;
+    }
+
+    function mousePressed() {
+      if (dist(mouseX, mouseY, center.x, center.y) < 10) draggingCenter = true;
+      else if (dist(mouseX, mouseY, radiusHandle.x, radiusHandle.y) < 10) draggingRadius = true;
+    }
+
+    function mouseDragged() {
+      if (draggingCenter) {
+        center.x = mouseX;
+        center.y = mouseY;
+        let gc = toGraphCoords(center.x, center.y);
+        a = gc.x;
+        b = gc.y;
+        center = toCanvasCoords(a, b);
+        updateInputs();
+        updateRadiusHandle();
+        updateEquationDisplay();
+      }
+      if (draggingRadius) {
+        radiusHandle.x = mouseX;
+        radiusHandle.y = mouseY;
+        let dx = (radiusHandle.x - center.x) / scale;
+        let dy = (center.y - radiusHandle.y) / scale;
+        r = Math.sqrt(dx * dx + dy * dy);
+        document.getElementById("angleInput").value = degrees(Math.atan2(dy, dx)).toFixed(1);
+        updateInputs();
+        updateEquationDisplay();
+      }
+    }
+
+    function mouseReleased() {
+      draggingCenter = false;
+      draggingRadius = false;
+    }
+
+    function updateInputs() {
+      document.getElementById("a").value = Math.round(a);
+      document.getElementById("b").value = Math.round(b);
+      document.getElementById("r").value = r.toFixed(2);
+    }
+
+    function updateFromInput() {
+      a = parseInt(document.getElementById("a").value);
+      b = parseInt(document.getElementById("b").value);
+      r = parseFloat(document.getElementById("r").value);
+      center = toCanvasCoords(a, b);
+      updateRadiusHandle();
+      updateEquationDisplay();
+    }
+
+    function updateFromAngle() {
+      updateRadiusHandle();
+    }
+
+    function updateEquationDisplay() {
+      const equation = `(x - ${a})<sup>2</sup> + (y - ${b})<sup>2</sup> = ${(r * r).toFixed(2)}`;
+      document.getElementById("equationDisplay").innerHTML = equation;
+    }
+
+    function simplifySqrt(n) {
+      n = parseFloat(n);
+      if (isNaN(n)) return "√?";
+      const isPerfectSquare = (x) => Math.sqrt(x) % 1 === 0;
+      let outside = 1;
+      let inside = n;
+      for (let i = 2; i <= Math.floor(Math.sqrt(n)); i++) {
+        while (inside % (i * i) === 0) {
+          inside /= i * i;
+          outside *= i;
+        }
+      }
+      if (inside === 1) return `${outside}`;
+      if (outside === 1) return `√${Math.round(inside)}`;
+      return `${outside}√${Math.round(inside)}`;
+    }
+
+    function simplifyFraction(numerator, denominator) {
+      const gcd = (a, b) => b ? gcd(b, a % b) : a;
+      const scale = 10000;
+      let num = Math.round(numerator * scale);
+      let denom = Math.round(denominator * scale);
+      const g = gcd(num, denom);
+      num /= g;
+      denom /= g;
+      return `${num}/${denom}`;
+    }
+  </script>
+</body>
+</html>
